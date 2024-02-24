@@ -6,8 +6,8 @@ class Log:
         self.log.write("\n")
         self.log.write("---------beginning of log\n")
     
-    def Write_Logfile(self, logtype: str, message: str) -> None:
-        self.log.write(f'{logtype}: {datetime.datetime.now()}: {message}\n')
+    def Write_Logfile(self, LogLevel: str, Message: str) -> None:
+        self.log.write(f'{LogLevel}: {datetime.datetime.now().replace(microsecond=0)}: {Message}\n')
         
     def Close_Logfile(self):
         self.log.close()

@@ -9,9 +9,14 @@ def main():
         server.listen(2)
         conn, addr = server.accept()
         with conn:
-            Echo_Client_Connected(log, addr)
+            log.Write_Logfile("I", f"Server is connected to {addr}")
+            data = conn.recv(1024)
+            log.Write_Logfile("I", f'Server Received {data}')
+            if not data:
+                raise ValueError("Data Is Null")
+            conn.sendall(data)
     except Exception as e:
-        print("The Error is: " + e)
+        log.Write_Logfile("E", f'The Error is: {e}')
     finally:
         log.Close_Logfile()
         server.close()
@@ -26,9 +31,6 @@ def Create_Server(log: Log) -> socket:
     except Exception as e:
         log.Write_Logfile("E",f'Server Crashed with Error {e}')
         print(f'The Error is: {e}')
-        
-def Echo_Client_Connected(log: Log, addr: str):
-    log.Write_Logfile("I", f"Server is connected to {addr}")
-        
+
 if __name__ == "__main__":
     main()
