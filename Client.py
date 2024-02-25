@@ -5,18 +5,18 @@ PORT = 8081
 
 def main():
     try:
-        log = Log.Log("Client.txt")
+        log = Log.Log("Client", newFileLog=False)
         client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         client.settimeout(60)
-        log.Write_Logfile('I',f'Client Created')
+        log.writeInfo(f'Client Created')
         client.connect((IP,PORT))
         client.sendall(b'Hello, world')
         data = client.recv(1024)
-        log.Write_Logfile('I',f'Client sent server {data}')
+        log.writeInfo(f'Client sent server {data}')
     except Exception as e:
-        log.Write_Logfile("E", f'The Error is: {e}')
+        log.writeFatal()
     finally:
-        log.Close_Logfile()
+        log.closeLog()
         client.close()
 
 if __name__ == "__main__":
