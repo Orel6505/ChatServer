@@ -3,6 +3,7 @@ from shutil import move
 
 class Log:
     def __init__(self, filename: str, newFileLog: bool=True) -> None:
+        self.filename = filename
         if newFileLog:
             try:
                 move(f'{filename}.log',f'{filename}.{int(time.time())}.log')
@@ -15,10 +16,10 @@ class Log:
             Log.__write(self,"---------beginning of log")
 
     def __write(self, Message: str) -> None:
-        if Log.isActive(self):
+        try:
             self.log.write(f'{Message}\n')
-        else:
-            raise OSError
+        except Exception:
+            raise OSError(f'Can\'t write to {self.filename}')
     
     def __writeLogEntry(self, LogEntry: str, Message: str) -> None:
         Log.__write(self,f'{LogEntry}: {datetime.datetime.now().replace(microsecond=0)}: {Message}')
