@@ -1,12 +1,10 @@
-import socket, Log, threading
+import socket, threading
+from Common import Common
 
-class Server:
+class Server(Common):
     def __init__(self, ip: str, port: int, logName: str="Server") -> None:
-        self.ip = ip
-        self.port = port
-        self.status = True
+        super().__init__(ip, port, logName)
         self.clients = []
-        self.log: Log.Log = self.__createLog(logName)
         self.server: socket.socket = self.createServer()
     
     ## Manage Clients
@@ -15,42 +13,28 @@ class Server:
     
     def addClient(self, client: tuple) -> None:
         self.clients.append(client)
-        self.log.writeInfo(f'New Client connected: {client[1]} ')
-        print(f'New Client connected: {client[1]} ')
+        self.logAndPrintInfo(f'New Client connected: {client[1]}')
     
     def removeClient(self, client: tuple) -> None:
-        self.clients.remove(client)
-        self.log.writeInfo(f'Client disconnected {client[1]}')
-        print(f'Client disconnected')
-        client[0].close()
+        if client in self.clients:
+            self.clients.remove(client)
+            self.logAndPrintInfo(f'Client {client[1]} disconnected')
+            client[0].close()
+        else:
+            self.log.writeWarning(f'Client {client[1]} already disconnected')
         
     def clearClients(self):
         for client in self.clients:
             self.removeClient(client)
     
-    ## Manage Status
-    def getStatus(self) -> bool:
-        return self.status
-
-    def setStatus(self, boolean: bool) -> None:
-        self.status = boolean
-    
-    ## Manage Log class
-    def __createLog(self, logName: str) -> Log.Log:
-        return Log.Log(logName, newFileLog=False)
-
-    def __closeLog(self) -> None:
-        self.log.closeLog()
-        self.log = None
-    
     ## Manage Server
     def createServer(self) -> socket.socket:
-        try: 
+        try:
             server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             server.bind((self.ip,self.port))
             server.listen(10)
             server.settimeout(10)
-            self.log.writeInfo("Server Created Successfully")
+            self.logAndPrintInfo("Server Created Successfully")
             return server
         except Exception:
             self.log.writeFatal()
@@ -60,10 +44,8 @@ class Server:
         if self.clients:
             self.clearClients()
         if self.server:
-            self.log.writeInfo("Server Closed")
+            self.logAndPrintInfo("Server Closed")
             self.server.close()
-        if self.log:
-            self.__closeLog()
         
     def acceptClient(self) -> None:
         try:
@@ -75,7 +57,7 @@ class Server:
                     if not self.getStatus():
                         break
                     continue
-                except OSError:
+                except socket.error:
                     self.log.writeWarning("Server Interrupted")
                     break
                 self.addClient(client)
@@ -88,17 +70,16 @@ class Server:
     def receiveData(self, client: tuple) -> None:
         try: 
             while self.getStatus():
-                conn: socket.socket = client[0]
-                try: 
-                    data = conn.recv(1024)
-                except ConnectionAbortedError:
+                try:
+                    message = client[0].recv(1024)
+                except socket.error:
                     break
-                if data == b'':
+                if message == b'':
                     self.removeClient(client)
                     break
                 else:
-                    print(f'{data}')
-                    self.log.writeInfo(f'Server Received {data} from {client[1]}')
+                    print(f'{message}')
+                    self.log.writeInfo(f'Server Received {message} from {client[1]}')
         except Exception:
             self.log.writeFatal()
             
@@ -106,15 +87,20 @@ class Server:
         try:
             while self.getStatus():
                 message = input("")
+                self.broadcastMessage(message)
                 if message == "close":
-                    self.log.writeInfo("Server is closing the server")
+                    self.logAndPrintInfo("Server is closing the server")
                     self.closeServer()
-                else:
-                    for client in self.clients:
-                        client[0].send(message.encode())
-                        self.log.writeInfo(f'Sent message "{message}" to address: {client[1]} ')
-        except Exception as e:
+        except Exception:
             self.log.writeFatal()
+            
+    def broadcastMessage(self, message: str) -> None:
+        for client in self.clients:
+            try:
+                client[0].send(message.encode())
+                self.log.writeInfo(f'Sent message "{message}" to address: {client[1]} ')
+            except socket.error:
+                self.removeClient(client)
 
 IP = "127.0.0.1"
 PORT = 8081
@@ -128,16 +114,12 @@ def main():
             server.sendMessage()
             t1.join()
         else:
-            print("Server failed")
-    except KeyboardInterrupt:
-        print('Server interrupted')
-    except Exception as e:
-        if server.getStatus():
-            server.log.writeFatal()
-        else:
-            print(e)
+            server.logAndPrintError("Server failed, Check Logs")
+    except Exception:
+        server.log.writeFatal()
     finally:
-        print("Server Finished")
+        server.logAndPrintInfo("Server Finished")
+        server.closeLog()
         if server.getStatus():
             server.closeServer()
 

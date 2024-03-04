@@ -60,3 +60,4 @@ class Log:
         
     def closeLog(self) -> None:
         self.log.close()
+        self.__instance = None
