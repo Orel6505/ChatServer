@@ -73,15 +73,18 @@ class Server(Common):
                 try:
                     message = client[0].recv(1024)
                 except socket.error:
+                    self.log.writeWarning("Connection Interrupted")
                     break
                 if message == b'':
-                    self.removeClient(client)
                     break
                 else:
                     print(f'{message}')
                     self.log.writeInfo(f'Server Received {message} from {client[1]}')
         except Exception:
             self.log.writeFatal()
+        finally:
+            self.removeClient(client)
+
             
     def sendMessage(self) -> None:
         try:
