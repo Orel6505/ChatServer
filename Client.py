@@ -1,6 +1,12 @@
 import socket, threading
 from Common import Common
 
+#
+# Copyright (C) 2024 Orel6505
+#
+# SPDX-License-Identifier: GNU General Public License v3.0
+#
+
 class Client(Common):
     def __init__(self, ip: str, port: int, logName: str="Client") -> None:
         super().__init__(ip, port, logName)

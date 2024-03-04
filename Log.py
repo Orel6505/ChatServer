@@ -1,6 +1,12 @@
 import datetime, time, traceback
 from shutil import move
 
+#
+# Copyright (C) 2024 Orel6505
+#
+# SPDX-License-Identifier: GNU General Public License v3.0
+#
+
 class Log:
     __instance = None
     
