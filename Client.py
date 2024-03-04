@@ -11,7 +11,9 @@ class Client(Common):
         try: 
             client: socket.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             client.settimeout(10)
-            self.log.writeInfo(f'Client Created Successfully')
+            self.logAndPrintInfo(f'Client Created Successfully')
+            client.connect((self.ip,self.port))
+            self.logAndPrintInfo(f'Client Connected to {self.ip}:{self.port}')
             return client
         except Exception:
             self.log.writeFatal()
@@ -19,49 +21,52 @@ class Client(Common):
     def closeClient(self) -> None:
         self.setStatus(False)
         if self.client:
-            self.log.writeInfo("Client is closed")
+            self.logAndPrintInfo("Closing connection")
             self.client.close()
-            
-    def connectToServer(self) -> None:
-        self.client.connect((self.ip,self.port))
-        self.log.writeInfo(f'Client Connected to {self.ip}:{self.port}')
-
+    
     def receiveData(self) -> None:
         try:
             while self.getStatus():
                 try:
                     message = self.client.recv(1024)
-                except ConnectionAbortedError:
-                    break
                 except TimeoutError:
                     self.log.writeInfo("Server Timeout")
                     if not self.getStatus():
                         break
                     continue
-                self.log.writeInfo(f'Server sent: {message.decode('utf-8')}')
-                print("Server: " + message.decode('utf-8'))
+                except socket.error:
+                    self.log.writeError("Server Connection was lost, closing connection")
+                    break
+                self.log.writeInfo(f'Recieved message from server: {message.decode('utf-8')}')
+                print(message.decode('utf-8'))
                 if message == b'close':
-                    self.log.writeInfo("Server closed this connection")
-                    self.closeClient()
-        except socket.error:
-            self.log.writeWarning("Server Closed Connection")
+                    self.logAndPrintInfo(f'Server closed connection, closing client...')
+                    break
         except Exception:
             self.log.writeFatal()
+        finally:
+            if self.getStatus():
+                self.closeClient()
             
     def sendMessage(self) -> None:
         try:
             while self.getStatus():
                 message = input("")
                 if self.getStatus:
-                    self.client.send(message.encode())
-                    self.log.writeInfo(f'Client send {message} to {self.ip}:{self.port}')
+                    try:
+                        self.client.send(message.encode())
+                        self.log.writeInfo(f'Client send {message} to {self.ip}:{self.port}')
+                    except socket.error:
+                        self.log.writeError("Server connection was lost, closing client")
+                        break
                     if message == "close":
-                        self.log.writeInfo("Closing connection")
-                        self.closeClient()
-        except socket.error:
-            self.log.writeWarning("Closing connection")
+                        self.log.writeError("Server closed connection, closing client...")
+                        break
         except Exception:
             self.log.writeFatal()
+        finally:
+            if self.getStatus():
+                self.closeClient()
 
 IP = "127.0.0.1"
 PORT = 8081
@@ -69,7 +74,6 @@ PORT = 8081
 def main():
     try:
         client = Client(IP,PORT)
-        client.connectToServer()
         t = threading.Thread(target=client.receiveData, args=())
         t.start()
         client.sendMessage()

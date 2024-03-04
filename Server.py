@@ -66,6 +66,9 @@ class Server(Common):
             t.join()
         except Exception:
             self.log.writeFatal()
+        finally:
+            if self.getStatus():
+                self.closeServer()
 
     def receiveData(self, client: tuple) -> None:
         try: 
@@ -79,13 +82,13 @@ class Server(Common):
                     break
                 else:
                     print(f'{message}')
+                    self.forwardMessage(message,client)
                     self.log.writeInfo(f'Server Received {message} from {client[1]}')
         except Exception:
             self.log.writeFatal()
         finally:
             self.removeClient(client)
 
-            
     def sendMessage(self) -> None:
         try:
             while self.getStatus():
@@ -96,14 +99,23 @@ class Server(Common):
                     self.closeServer()
         except Exception:
             self.log.writeFatal()
-            
+    
     def broadcastMessage(self, message: str) -> None:
         for client in self.clients:
             try:
-                client[0].send(message.encode())
-                self.log.writeInfo(f'Sent message "{message}" to address: {client[1]} ')
+                client[0].send(f'Server: {message}'.encode())
+                self.log.writeInfo(f'Sent message "{message}" to address: {client[1]}')
             except socket.error:
                 self.removeClient(client)
+    
+    def forwardMessage(self, message: str, sender: tuple):
+        for client in self.clients:
+            if not sender == client:
+                try:
+                    client[0].send(f'{sender[1]}: {message}'.encode())
+                    self.log.writeInfo(f'Sent message "{message}" to address: {client[1]}')
+                except socket.error:
+                    self.removeClient(client)
 
 IP = "127.0.0.1"
 PORT = 8081
@@ -111,13 +123,10 @@ PORT = 8081
 def main():
     try:
         server = Server(IP,PORT)
-        if server.getStatus():
-            t1= threading.Thread(target=server.acceptClient, args=())
-            t1.start()
-            server.sendMessage()
-            t1.join()
-        else:
-            server.logAndPrintError("Server failed, Check Logs")
+        t = threading.Thread(target=server.acceptClient, args=())
+        t.start()
+        server.sendMessage()
+        t.join()
     except Exception:
         server.log.writeFatal()
     finally:
