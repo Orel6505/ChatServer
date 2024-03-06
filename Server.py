@@ -67,7 +67,7 @@ class Server(Common):
                     self.log.writeWarning("Server Interrupted")
                     break
                 self.addClient(client)
-                t = threading.Thread(target=Server.receiveData, args=(self,client))
+                t = threading.Thread(target=Server.receiveMessage, args=(self,client))
                 t.start()
             t.join()
         except Exception:
@@ -76,7 +76,7 @@ class Server(Common):
             if self.getStatus():
                 self.closeServer()
 
-    def receiveData(self, client: tuple) -> None:
+    def receiveMessage(self, client: tuple) -> None:
         try: 
             while self.getStatus():
                 try:

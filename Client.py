@@ -30,7 +30,7 @@ class Client(Common):
             self.logAndPrintInfo("Closing connection")
             self.client.close()
     
-    def receiveData(self) -> None:
+    def receiveMessage(self) -> None:
         try:
             while self.getStatus():
                 try:
@@ -43,7 +43,7 @@ class Client(Common):
                 except socket.error:
                     self.log.writeError("Server Connection was lost, closing connection")
                     break
-                self.log.writeInfo(f'Recieved message from server: {message.decode('utf-8')}')
+                self.log.writeInfo(f'Received message from server: {message.decode('utf-8')}')
                 print(message.decode('utf-8'))
                 if message == b'close':
                     self.logAndPrintInfo(f'Server closed connection, closing client...')
@@ -80,7 +80,7 @@ PORT = 8081
 def main():
     try:
         client = Client(IP,PORT)
-        t = threading.Thread(target=client.receiveData, args=())
+        t = threading.Thread(target=client.receiveMessage, args=())
         t.start()
         client.sendMessage()
         t.join()
