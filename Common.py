@@ -8,8 +8,9 @@ from Security.CertificateManager import CertificateManager
 # SPDX-License-Identifier: GNU General Public License v3.0
 #
 
-class Common():
+class Common(RSAKeyManager):
     def __init__(self, ip: str, port: int, logName: str) -> None:
+        super.__init__()
         self.status = True
         self.ip = ip
         self.port = port
