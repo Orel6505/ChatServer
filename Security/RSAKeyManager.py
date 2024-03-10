@@ -8,17 +8,17 @@ class RSAKeyManager:
         self.pubKey: rsa.RSAPublicKey = self.privKey.public_key()
     
     @staticmethod
-    def writeToSafe(Key: bytes, FilePath: str, FileName: str):
+    def WriteToSafe(Key: bytes, FilePath: str, FileName: str):
         with open(f'{FilePath}/{FileName}.pem', "wb") as f:
-            f.write(Key)
+            f.Write(Key)
     
     @staticmethod
-    def readFromSafe(FilePath: str, FileName: str):
+    def ReadFromSafe(FilePath: str, FileName: str):
         with open(f'{FilePath}/{FileName}.pem', "rb") as f:
             return f.read()
     
     @staticmethod
-    def loadPublicKey(pemBytes: bytes):
+    def LoadPublicKey(pemBytes: bytes):
         return serialization.load_pem_public_key(pemBytes, backend=default_backend())
     
     @staticmethod
@@ -26,16 +26,16 @@ class RSAKeyManager:
         return serialization.load_pem_private_key(pemBytes, backend=default_backend())
 
     @staticmethod
-    def encryptData(key, data: bytes):
+    def EncryptData(key, data: bytes):
         key = RSAKeyManager.loadPublicKey(key)
         return key.encrypt(data,padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()),algorithm=hashes.SHA256(),label=None))
     
     @staticmethod
-    def decryptData(key, data: bytes):
+    def DecryptData(key, data: bytes):
         return key.decrypt(data, padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(),label=None))
     
-    def writePublicKeyToSafe(self, FilePath: str, FileName: str):
-        RSAKeyManager.writeToSafe(self.pubKey.public_bytes(encoding=serialization.Encoding.PEM, format=serialization.PublicFormat.PKCS1), FilePath, FileName)
+    def WritePublicKeyToSafe(self, FilePath: str, FileName: str):
+        RSAKeyManager.WriteToSafe(self.pubKey.public_bytes(encoding=serialization.Encoding.PEM, format=serialization.PublicFormat.PKCS1), FilePath, FileName)
     
-    def writePrivateKeyToSafe(self, FilePath: str, FileName: str):
-        RSAKeyManager.writeToSafe(self.privKey.private_bytes(encoding=serialization.Encoding.PEM, format=serialization.PrivateFormat.PKCS8, encryption_algorithm=serialization.NoEncryption()), FilePath, FileName)
+    def WritePrivateKeyToSafe(self, FilePath: str, FileName: str):
+        RSAKeyManager.WriteToSafe(self.privKey.private_bytes(encoding=serialization.Encoding.PEM, format=serialization.PrivateFormat.PKCS8, encryption_algorithm=serialization.NoEncryption()), FilePath, FileName)

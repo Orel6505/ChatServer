@@ -9,10 +9,16 @@ class TLSManager(RSAKeyManager):
     def ServerHello(self):
         return self.cert
     
+    def ServerHelloDone(self):
+        return self.cert
+    
     def ClientHello(self, cert):
         self.cert = cert
         #if not CertificateManager.CheckCertificate(cert): return None
         return self.pubKey
+    
+    def ClientHelloDone(self):
+        return self.cert
         
     def ServerKeyExchange(self, key):
         self.clientKey = key
@@ -30,13 +36,13 @@ def test():
     safePath = "safe"
     certFileName = "cert"
     try:
-        cert = CertificateManager.ReadCertificateFromSafe(FilePath=safePath, FileName=certFileName)
+        cert = CertificateManager.ReadCertificateFromSafe(safePath, certFileName)
     except FileNotFoundError:
         certKey = RSAKeyManager()
-        RSAKeyManager.writePrivateKeyToSafe(certKey, safePath, certFileName)
+        RSAKeyManager.WritePrivateKeyToSafe(certKey, safePath, "PrivCert")
         CertificateManager.GenerateCertificate(certKey, "IL", "Haifa", "Ramla", "Orel6505", "Orel Yosupov")
         CertificateManager.WriteCertToSafe(cert, safePath, certFileName)
-        cert = CertificateManager.ReadCertificateFromSafe(FilePath=safePath, FileName=certFileName)
+        cert = CertificateManager.ReadCertificateFromSafe(safePath, certFileName)
     TLSServer = TLSManager(cert)
     TLSClient = TLSManager()
     sResponse = TLSServer.ServerHello()
