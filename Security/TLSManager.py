@@ -1,21 +1,17 @@
-from RSAKeyGenerator import RSAKeyGenerator
-from CertificateGenerator import CertificateGenerator
+from RSAKeyManager import RSAKeyManager
+from CertificateManager import CertificateManager
 
-class TLSManager(RSAKeyGenerator):
-    def __init__(self) -> None:
+class TLSManager(RSAKeyManager):      
+    def __init__(self, cert: bytes=None) -> None:
         super().__init__()
-        try:
-            self.cert = RSAKeyGenerator.readFromSafe("certification")
-        except FileNotFoundError:
-            CertificateGenerator().generateCSR()
-            self.cert = RSAKeyGenerator.readFromSafe("certification")
+        self.cert = cert
         
     def ServerHello(self):
         return self.cert
     
     def ClientHello(self, cert):
-        cert = cert
-        if not CertificateGenerator.checkCSR(cert): return None
+        self.cert = cert
+        #if not CertificateManager.CheckCertificate(cert): return None
         return self.pubKey
         
     def ServerKeyExchange(self, key):
@@ -30,17 +26,27 @@ class TLSManager(RSAKeyGenerator):
         #self.clientKey = self.decrypt(data)
         pass
     
-def main():
-    TLSServer = TLSManager()
+def test():
+    safePath = "safe"
+    certFileName = "cert"
+    try:
+        cert = CertificateManager.ReadCertificateFromSafe(FilePath=safePath, FileName=certFileName)
+    except FileNotFoundError:
+        certKey = RSAKeyManager()
+        RSAKeyManager.writePrivateKeyToSafe(certKey, safePath, certFileName)
+        CertificateManager.GenerateCertificate(certKey, "IL", "Haifa", "Ramla", "Orel6505", "Orel Yosupov")
+        CertificateManager.WriteCertToSafe(cert, safePath, certFileName)
+        cert = CertificateManager.ReadCertificateFromSafe(FilePath=safePath, FileName=certFileName)
+    TLSServer = TLSManager(cert)
     TLSClient = TLSManager()
-    serverresp = TLSServer.ServerHello()
-    clientresp = TLSClient.ClientHello(serverresp)
-    serverresp = TLSServer.ServerKeyExchange(clientresp)
-    clientresp = TLSClient.ClientKeyExchange(serverresp)
+    sResponse = TLSServer.ServerHello()
+    cResponse = TLSClient.ClientHello(sResponse)
+    sResponse = TLSServer.ServerKeyExchange(cResponse)
+    cResponse = TLSClient.ClientKeyExchange(sResponse)
     if TLSClient.pubKey == TLSServer.clientKey:
         print("Yay")
     if TLSServer.pubKey == TLSClient.serverKey:
         print("Yay")
 
 if __name__ ==  '__main__':
-    main()
+    test()
