@@ -32,6 +32,17 @@ class Server(Common):
     def clearClients(self):
         for client in self.clients:
             self.removeClient(client)
+            
+    # My Own Implement of TLS
+    def ServerHello(self):
+        return self.cert
+    
+    def ServerHelloDone(self):
+        pass
+    
+    def ServerKeyExchange(self, key):
+        self.clientKey = key
+        return self.pubKey
     
     ## Manage Server
     def createServer(self) -> socket.socket:
@@ -88,7 +99,7 @@ class Server(Common):
                     break
                 else:
                     print(f'{message}')
-                    self.forwardMessage(message,client)
+                    self.broadcastMessage(message,client)
                     self.log.writeInfo(f'Server Received {message} from {client[1]}')
         except Exception:
             self.log.writeFatal()
@@ -106,22 +117,14 @@ class Server(Common):
         except Exception:
             self.log.writeFatal()
     
-    def broadcastMessage(self, message: str) -> None:
+    def broadcastMessage(self, message: str, sender: tuple=None) -> None:
         for client in self.clients:
             try:
-                client[0].send(f'Server: {message}'.encode())
-                self.log.writeInfo(f'Sent message "{message}" to address: {client[1]}')
+                if not sender == client:
+                    client[0].send(f'Server: {message}'.encode())
+                    self.log.writeInfo(f'Sent message "{message}" to address: {client[1]}')
             except socket.error:
                 self.removeClient(client)
-    
-    def forwardMessage(self, message: str, sender: tuple):
-        for client in self.clients:
-            if not sender == client:
-                try:
-                    client[0].send(f'{sender[1]}: {message}'.encode())
-                    self.log.writeInfo(f'Sent message "{message}" to address: {client[1]}')
-                except socket.error:
-                    self.removeClient(client)
 
 IP = "127.0.0.1"
 PORT = 8081

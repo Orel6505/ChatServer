@@ -1,4 +1,6 @@
-import Log
+from Log import Log
+from Security.RSAKeyManager import RSAKeyManager
+from Security.CertificateManager import CertificateManager
 
 #
 # Copyright (C) 2024 Orel6505
@@ -12,6 +14,10 @@ class Common():
         self.ip = ip
         self.port = port
         self.log = self.openLog(logName)
+        
+    # My own implementation of TLS
+    def ChangeChiperSpec(self):
+        pass
     
     ## Manage Status
     def getStatus(self) -> bool:
@@ -21,8 +27,8 @@ class Common():
         self.status = boolean
         
     ## Manage Log class
-    def openLog(self, logName: str) -> Log.Log:
-        return Log.Log(logName, newFileLog=False)
+    def openLog(self, logName: str) -> Log:
+        return Log(logName, newFileLog=False)
 
     def closeLog(self) -> None:
         self.log.closeLog()

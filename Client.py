@@ -11,7 +11,18 @@ class Client(Common):
     def __init__(self, ip: str, port: int, logName: str="Client") -> None:
         super().__init__(ip, port, logName)
         self.client: socket.socket = self.createClient()
+        
+    ## My own implementation of TLS
+    def ClientHello(self, cert):
+        self.cert = cert
+        #checking certificate is missing
+        return self.pubKey
     
+    def ClientHelloDone(self):
+        pass
+    
+    def ClientKeyExchange(self, key: bytes):
+        self.serverKey = key
     ## Manage Client
     def createClient(self) -> socket.socket:
         try: 

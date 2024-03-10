@@ -10,7 +10,7 @@ class TLSManager(RSAKeyManager):
         return self.cert
     
     def ServerHelloDone(self):
-        return self.cert
+        pass
     
     def ClientHello(self, cert):
         self.cert = cert
@@ -18,7 +18,7 @@ class TLSManager(RSAKeyManager):
         return self.pubKey
     
     def ClientHelloDone(self):
-        return self.cert
+        pass
         
     def ServerKeyExchange(self, key):
         self.clientKey = key
