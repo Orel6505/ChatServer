@@ -1,5 +1,7 @@
-import socket, threading
+import socket, threading, os
 from Common import Common
+from CertificateManager import CertificateManager
+from KeysAndHashes import KeysAndHashes
 
 #
 # Copyright (C) 2024 Orel6505
@@ -8,9 +10,11 @@ from Common import Common
 #
 
 class Server(Common):
-    def __init__(self, ip: str, port: int, logName: str="Server") -> None:
+    def __init__(self, ip: str, port: int, logName: str="Server",clientCert: bool=False) -> None:
         super().__init__(ip, port, logName)
         self.clients = []
+        self.threads = []
+        self.clientCert = clientCert
         self.server: socket.socket = self.createServer()
     
     ## Manage Clients
@@ -19,6 +23,9 @@ class Server(Common):
     
     def addClient(self, client: tuple) -> None:
         self.clients.append(client)
+        t = threading.Thread(target=Server.receiveMessage, args=(self,client))
+        self.threads.append(t)
+        t.start()
         self.logAndPrintInfo(f'New Client connected: {client[1]}')
     
     def removeClient(self, client: tuple) -> None:
@@ -34,11 +41,12 @@ class Server(Common):
             self.removeClient(client)
             
     # My Own Implement of TLS
+    def AddSecrets(self, cert, key):
+        self.cert: bytes = cert
+        self.key: bytes = key
+    
     def ServerHello(self):
         return self.cert
-    
-    def ServerHelloDone(self):
-        pass
     
     def ServerKeyExchange(self, key):
         self.clientKey = key
@@ -66,6 +74,7 @@ class Server(Common):
         
     def acceptClient(self) -> None:
         try:
+            threads = []
             while self.getStatus():
                 try:
                     client: tuple = self.server.accept()
@@ -77,25 +86,101 @@ class Server(Common):
                 except socket.error:
                     self.log.writeWarning("Server Interrupted")
                     break
-                self.addClient(client)
-                t = threading.Thread(target=Server.receiveMessage, args=(self,client))
-                t.start()
-            t.join()
+                self.secureConnection(client)
+                #self.addClient(client)
+            for t in threads:
+                t.join()
         except Exception:
             self.log.writeFatal()
         finally:
             if self.getStatus():
                 self.closeServer()
+                
+    def secureConnection(self, client: tuple) -> None:
+        try:
+            ServerHello = {}
+            
+            ClientHello = client[0].recv(self.buffer)
+            ClientHello = self.DeserializeJson(ClientHello)
+            self.logAndPrintInfo(ClientHello)
+
+            ClientRandom = ClientHello["ClientRandom"]
+            
+            #Select Hash
+            ChosenHash = self.ChooseHashType(ClientHello["SupportedHashes"])
+            if ChosenHash:
+                ServerHello["ChosenHashCipher"] = ChosenHash
+            
+            #Select Hash
+            ChosenKey = self.ChooseKeyType(ClientHello["SupportedKeys"])
+            if ChosenKey:
+                ServerHello["ChosenKeyCipher"] = ChosenKey
+            
+            #Generate Server Random
+            ServerRandom = os.urandom(32)
+            ServerHello["ServerRandom"] = ServerRandom
+            
+            #Add the certificate
+            ServerHello["ServerCert"] = self.cert.decode()
+            
+            self.logAndPrintInfo(ServerHello)
+            #Send
+            client[0].send(self.SerializeJson(ServerHello))
+            ServerHello.clear()
+
+            #Receive
+            ClientHello = self.DeserializeJson(client[0].recv(self.buffer))
+                            
+            #Gets Pre-master secret and decrypt it using it's certificate private key
+            ClientSecret = KeysAndHashes.DecryptData(self.key, ClientHello["ClientSecret"])
+            
+            #Generate Server Secret
+            ServerSecret = os.urandom(42)
+            
+            #Client Certificate is required?
+            ServerHello["ClientCSR"] = self.clientCert
+            client[0].send(self.SerializeJson(ServerHello))
+            ServerHello.clear()
+            ClientHello = self.DeserializeJson(client[0].recv(self.buffer))
+            if self.clientCert:
+                cert = CertificateManager.LoadCertificate(ClientHello["ClientCert"])
+            
+                #Validate CSR
+                if not CertificateManager.ValidateCSR(cert):
+                    return None
+                
+                #Encrypt the Server Secret
+                ServerHello["ServerSecret"] = KeysAndHashes.EncryptData(cert.public_key(), ServerSecret)
+            else:
+                #Load Client Public key
+                #ClientPubKey = KeysAndHashes.LoadPublicKey(ClientHello["ClientPubKey"])
+                self.closeServer()
+                #Encrypt the Server Secret
+                #ServerHello["ServerSecret"] = KeysAndHashes.EncryptData(ClientPubKey, ServerSecret)
+            client[0].send(self.SerializeJson(ServerHello))
+            ServerHello.clear()
+            
+            MasterKey = self.GenerateMasterKey(ServerRandom,ClientRandom,ServerSecret,ClientSecret)
+            
+            #ServerHello["FirstMessage"] = KeysAndHashes.EncryptData(ClientPubKey, "ReadyToSwitch")
+            #client[0].send(self.SerializeJson(ServerHello))
+            #ServerHello.clear()
+                        
+            #if KeysAndHashes.DecryptData(self.key, ClientHello["FirstMessage"]) == "ReadyToSwitch":
+            print("Worked")
+        except Exception:
+            self.log.writeFatal()
 
     def receiveMessage(self, client: tuple) -> None:
         try: 
             while self.getStatus():
                 try:
-                    message = client[0].recv(1024)
+                    message = client[0].recv(self.buffer)
                 except socket.error:
                     self.log.writeWarning("Connection Interrupted")
                     break
                 if message == b'':
+                    self.log.writeWarning("Client disconnected")
                     break
                 else:
                     print(f'{message}')
@@ -112,7 +197,7 @@ class Server(Common):
                 message = input("")
                 self.broadcastMessage(message)
                 if message == "close":
-                    self.logAndPrintInfo("Server is closing the server")
+                    self.logAndPrintInfo("Server is shutting down")
                     self.closeServer()
         except Exception:
             self.log.writeFatal()
@@ -120,7 +205,7 @@ class Server(Common):
     def broadcastMessage(self, message: str, sender: tuple=None) -> None:
         for client in self.clients:
             try:
-                if not sender == client:
+                if sender != client:
                     client[0].send(f'Server: {message}'.encode())
                     self.log.writeInfo(f'Sent message "{message}" to address: {client[1]}')
             except socket.error:
@@ -129,9 +214,24 @@ class Server(Common):
 IP = "127.0.0.1"
 PORT = 8081
 
+SIP = "127.0.0.1"
+SPORT = 8082
+
 def main():
     try:
+        safePath, certFileName = "safe", "cert"
+        try:
+            cert = CertificateManager.ReadCertificateFromSafe(safePath, certFileName)
+            key = KeysAndHashes.ReadFromSafe(safePath, "PrivCert")
+            certKey = KeysAndHashes.LoadPrivateKey(key)
+        except FileNotFoundError:
+            certKey = CertificateManager()
+            KeysAndHashes.WritePrivateKeyToSafe(certKey, safePath, "PrivCert")
+            cert = certKey.GenerateCertificate(certKey, "IL", "Haifa", "Ramla", "Orel6505", "Orel Yosupov")
+            certKey.WriteCertToSafe(cert, safePath, certFileName)
+            cert = certKey.ReadCertificateFromSafe(safePath, certFileName)
         server = Server(IP,PORT)
+        server.AddSecrets(cert, certKey)
         t = threading.Thread(target=server.acceptClient, args=())
         t.start()
         server.sendMessage()
