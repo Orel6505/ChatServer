@@ -55,6 +55,18 @@ class Log:
         
     def writeError(self, Message: str) -> None:
         self.__writeLogEntry("E", Message)
+        
+    def writePrintInfo(self, message: str)-> None:
+        self.writeInfo(message)
+        print(message)
+        
+    def writePrintWarning(self, message: str) -> None:
+        self.writeWarning(message)
+        print(message)
+        
+    def writePrintError(self, message: str) -> None:
+        self.writeError(message)
+        print(message) 
 
     def writeFatal(self) -> None:
         self.__write("---------Fatal Error---------")

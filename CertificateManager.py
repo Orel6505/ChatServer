@@ -1,5 +1,5 @@
 import datetime
-from KeysAndHashes import KeysAndHashes
+from CryptoHelper import CryptoHelper
 
 from cryptography import x509
 from cryptography.x509.oid import NameOID
@@ -53,19 +53,19 @@ class CertificateManager():
         cert = cert.sign(privKey, hashes.SHA256())
         return cert
     
-    # Tries to write the certificate
     @staticmethod
-    def WriteCertToSafe(cert: x509.Certificate, FilePath: str, FileName: str):
-        KeysAndHashes.WriteToSafe(cert.public_bytes(serialization.Encoding.PEM), FilePath, FileName)
-        
-    # Tries to Load the certificate
-    @staticmethod
-    def ReadCertificateFromSafe(FilePath: str, FileName: str) -> bytes:
-        return KeysAndHashes.ReadFromSafe(FilePath, FileName)
+    def WriteCertToSafe(self, Key: bytes, SafeLocation:str, FileName: str):
+        with open(f'{SafeLocation}/{FileName}.pem', "wb") as f:
+            f.write(Key)
     
     @staticmethod
-    def LoadCertificate(pemBytes: str):
-        return x509.load_pem_x509_certificate(pemBytes.encode(), default_backend())
+    def ReadCertificateFromSafe(self, SafeLocation:str, FileName: str):
+        with open(f'{SafeLocation}/{FileName}.pem', "rb") as f:
+            return f.read()
+    
+    @staticmethod
+    def LoadCertificate(cert: bytes):
+        return x509.load_pem_x509_certificate(cert, default_backend())
     
     @staticmethod
     def ValidateCertificate(cert: x509.Certificate, TrustedList: list):

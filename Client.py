@@ -1,6 +1,6 @@
 import socket, threading, os
-from Common import Common
-from KeysAndHashes import KeysAndHashes
+from BaseChat import BaseChat
+from CryptoHelper import CryptoHelper
 from CertificateManager import CertificateManager
 
 #
@@ -9,24 +9,19 @@ from CertificateManager import CertificateManager
 # SPDX-License-Identifier: GNU General Public License v3.0
 #
 
-class Client(Common):
-    def __init__(self, ip: str, port: int, logName: str="Client") -> None:
-        super().__init__(ip, port, logName)
+class Client(BaseChat):
+    def __init__(self, ip: str, port: int, cHelper: CryptoHelper, logName: str="Client") -> None:
+        super().__init__(ip, port, logName, cHelper)
         self.client: socket.socket = self.createClient()
-        
-   # My Own Implement of TLS
-    def AddSecrets(self, cert, key):
-        self.cert: bytes = cert
-        self.key: bytes = key
     
     ## Manage Client
     def createClient(self) -> socket.socket:
         try: 
             client: socket.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             client.settimeout(10)
-            self.logAndPrintInfo(f'Client Created Successfully')
+            self.log.writePrintInfo(f'Client Created Successfully')
             client.connect((self.ip,self.port))
-            self.logAndPrintInfo(f'Client Connected to {self.ip}:{self.port}')
+            self.log.writePrintInfo(f'Client Connected to {self.ip}:{self.port}')
             return client
         except Exception:
             self.log.writeFatal()
@@ -34,10 +29,10 @@ class Client(Common):
     def closeClient(self) -> None:
         self.setStatus(False)
         if self.client:
-            self.logAndPrintInfo("Closing connection")
+            self.log.writePrintInfo("Closing connection")
             self.client.close()
-    
-    def secureConnection(self) -> None:
+            
+    def ClientSecureConnection(self) -> None:
         try:
             ClientHello = {}
 
@@ -50,18 +45,20 @@ class Client(Common):
             ClientHello["ClientRandom"] = ClientRandom
 
             #Send
-            self.logAndPrintInfo(ClientHello)
-            self.client.send(self.SerializeJson(ClientHello))
+            self.log.writePrintInfo(ClientHello)
+            if not self.SerializeJson(ClientHello).encode('utf-8'):
+                return -1
+            self.client.send(self.SerializeJson(ClientHello).encode('utf-8'))
             
             ClientHello.clear()
             
             #Receive
             ServerHello = self.DeserializeJson(self.client.recv(self.buffer))
-            self.logAndPrintInfo(ServerHello)
+            self.log.writePrintInfo(ServerHello)
             ServerRandom = ServerHello["ServerRandom"] 
             
             #Load the certificate
-            self.logAndPrintInfo(ServerHello["ServerCert"])
+            self.log.writePrintInfo(ServerHello["ServerCert"])
             cert = CertificateManager.LoadCertificate(ServerHello["ServerCert"].encode())
             
             #Validate Certificate
@@ -72,7 +69,7 @@ class Client(Common):
             ClientSecret = os.urandom(42)
             
             #Encrypt the Client Secret with the Certificate public key
-            ClientHello["ClientSecret"] = KeysAndHashes.EncryptData(cert.public_key(), ClientSecret)
+            ClientHello["ClientSecret"] = self.cHelper.EncryptAsymmetricData(cert.public_key(), ClientSecret)
             
             #Send
             self.client.send(self.SerializeJson(ClientHello))
@@ -91,14 +88,14 @@ class Client(Common):
             ClientHello.clear()
             ServerHello = self.DeserializeJson(self.client.recv(self.buffer))
             if clientCert:
-                ServerSecret = KeysAndHashes.DecryptData(self.key, ClientHello["ClientSecret"])
+                ServerSecret = self.cHelper.DecryptAsymmetricData(self.key, ClientHello["ClientSecret"])
             else:
-                #ServerSecret = KeysAndHashes.DecryptData(key, ClientHello["ClientSecret"])
+                #ServerSecret = self.cHelper.DecryptAsymmetricData(key, ClientHello["ClientSecret"])
                 print("Not Implemented")
             
             MasterKey = self.GenerateMasterKey(ServerRandom,ClientRandom,ServerSecret,ClientSecret)
 
-            #if KeysAndHashes.DecryptData(self.key, ServerHello["FirstMessage"]) == "ReadyToSwitch":
+            #if self.cHelper.DecryptAsymmetricData(self.key, ServerHello["FirstMessage"]) == "ReadyToSwitch":
             print("Worked")
         except Exception:
             self.log.writeFatal()
@@ -119,10 +116,10 @@ class Client(Common):
                 self.log.writeInfo(f'Received message from server: {message.decode('utf-8')}')
                 print(message.decode('utf-8'))
                 if message == b'close':
-                    self.logAndPrintInfo(f'Server closed connection, closing client...')
+                    self.log.writePrintInfo(f'Server closed connection, closing client...')
                     break
                 elif message == b'':
-                    self.logAndPrintInfo("Server Connection was lost, closing connection")
+                    self.log.writePrintInfo("Server Connection was lost, closing connection")
                     break
         except Exception:
             self.log.writeFatal()
@@ -156,7 +153,6 @@ PORT = 8081
 def main():
     try:
         client = Client(IP,PORT)
-        client.secureConnection()
         #t = threading.Thread(target=client.receiveMessage, args=())
         #t.start()
         #client.sendMessage()

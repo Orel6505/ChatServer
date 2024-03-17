@@ -1,7 +1,7 @@
 import socket, threading, os
-from Common import Common
+from BaseChat import BaseChat
 from CertificateManager import CertificateManager
-from KeysAndHashes import KeysAndHashes
+from CryptoHelper import CryptoHelper
 
 #
 # Copyright (C) 2024 Orel6505
@@ -9,9 +9,9 @@ from KeysAndHashes import KeysAndHashes
 # SPDX-License-Identifier: GNU General Public License v3.0
 #
 
-class Server(Common):
-    def __init__(self, ip: str, port: int, logName: str="Server",clientCert: bool=False) -> None:
-        super().__init__(ip, port, logName)
+class Server(BaseChat):
+    def __init__(self, ip: str, port: int, cHelper: CryptoHelper, logName: str="Server",clientCert: bool=True) -> None:
+        super().__init__(ip, port, logName, cHelper)
         self.clients = []
         self.threads = []
         self.clientCert = clientCert
@@ -26,12 +26,12 @@ class Server(Common):
         t = threading.Thread(target=Server.receiveMessage, args=(self,client))
         self.threads.append(t)
         t.start()
-        self.logAndPrintInfo(f'New Client connected: {client[1]}')
+        self.log.writePrintInfo(f'New Client connected: {client[1]}')
     
     def removeClient(self, client: tuple) -> None:
         if client in self.clients:
             self.clients.remove(client)
-            self.logAndPrintInfo(f'Client {client[1]} disconnected')
+            self.log.writePrintInfo(f'Client {client[1]} disconnected')
             client[0].close()
         else:
             self.log.writeWarning(f'Client {client[1]} already disconnected')
@@ -39,11 +39,6 @@ class Server(Common):
     def clearClients(self):
         for client in self.clients:
             self.removeClient(client)
-            
-    # My Own Implement of TLS
-    def AddSecrets(self, cert, key):
-        self.cert: bytes = cert
-        self.key: bytes = key
     
     def ServerHello(self):
         return self.cert
@@ -51,58 +46,14 @@ class Server(Common):
     def ServerKeyExchange(self, key):
         self.clientKey = key
         return self.pubKey
-    
-    ## Manage Server
-    def createServer(self) -> socket.socket:
-        try:
-            server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            server.bind((self.ip,self.port))
-            server.listen(10)
-            server.settimeout(10)
-            self.logAndPrintInfo("Server Created Successfully")
-            return server
-        except Exception:
-            self.log.writeFatal()
-            
-    def closeServer(self) -> None:
-        self.setStatus(False)
-        if self.clients:
-            self.clearClients()
-        if self.server:
-            self.logAndPrintInfo("Server Closed")
-            self.server.close()
-        
-    def acceptClient(self) -> None:
-        try:
-            threads = []
-            while self.getStatus():
-                try:
-                    client: tuple = self.server.accept()
-                except TimeoutError:
-                    self.log.writeInfo("Server Timeout")
-                    if not self.getStatus():
-                        break
-                    continue
-                except socket.error:
-                    self.log.writeWarning("Server Interrupted")
-                    break
-                self.secureConnection(client)
-                #self.addClient(client)
-            for t in threads:
-                t.join()
-        except Exception:
-            self.log.writeFatal()
-        finally:
-            if self.getStatus():
-                self.closeServer()
-                
-    def secureConnection(self, client: tuple) -> None:
+
+    def ServerSecureConnection(self, client: tuple) -> None:
         try:
             ServerHello = {}
             
             ClientHello = client[0].recv(self.buffer)
             ClientHello = self.DeserializeJson(ClientHello)
-            self.logAndPrintInfo(ClientHello)
+            self.writePrintInfo(ClientHello)
 
             ClientRandom = ClientHello["ClientRandom"]
             
@@ -123,7 +74,7 @@ class Server(Common):
             #Add the certificate
             ServerHello["ServerCert"] = self.cert.decode()
             
-            self.logAndPrintInfo(ServerHello)
+            self.writePrintInfo(ServerHello)
             #Send
             client[0].send(self.SerializeJson(ServerHello))
             ServerHello.clear()
@@ -132,7 +83,7 @@ class Server(Common):
             ClientHello = self.DeserializeJson(client[0].recv(self.buffer))
                             
             #Gets Pre-master secret and decrypt it using it's certificate private key
-            ClientSecret = KeysAndHashes.DecryptData(self.key, ClientHello["ClientSecret"])
+            ClientSecret = self.cHelper.DecryptData(self.key, ClientHello["ClientSecret"])
             
             #Generate Server Secret
             ServerSecret = os.urandom(42)
@@ -150,26 +101,69 @@ class Server(Common):
                     return None
                 
                 #Encrypt the Server Secret
-                ServerHello["ServerSecret"] = KeysAndHashes.EncryptData(cert.public_key(), ServerSecret)
+                ServerHello["ServerSecret"] = self.cHelper.EncryptData(cert.public_key(), ServerSecret)
             else:
                 #Load Client Public key
-                #ClientPubKey = KeysAndHashes.LoadPublicKey(ClientHello["ClientPubKey"])
+                #ClientPubKey = self.cHelper.LoadPublicKey(ClientHello["ClientPubKey"])
                 self.closeServer()
                 #Encrypt the Server Secret
-                #ServerHello["ServerSecret"] = KeysAndHashes.EncryptData(ClientPubKey, ServerSecret)
+                #ServerHello["ServerSecret"] = self.cHelper.EncryptData(ClientPubKey, ServerSecret)
             client[0].send(self.SerializeJson(ServerHello))
             ServerHello.clear()
             
             MasterKey = self.GenerateMasterKey(ServerRandom,ClientRandom,ServerSecret,ClientSecret)
             
-            #ServerHello["FirstMessage"] = KeysAndHashes.EncryptData(ClientPubKey, "ReadyToSwitch")
+            #ServerHello["FirstMessage"] = self.cHelper.EncryptData(ClientPubKey, "ReadyToSwitch")
             #client[0].send(self.SerializeJson(ServerHello))
             #ServerHello.clear()
                         
-            #if KeysAndHashes.DecryptData(self.key, ClientHello["FirstMessage"]) == "ReadyToSwitch":
+            #if self.cHelper.DecryptData(self.key, ClientHello["FirstMessage"]) == "ReadyToSwitch":
             print("Worked")
         except Exception:
             self.log.writeFatal()
+    
+    ## Manage Server
+    def createServer(self) -> socket.socket:
+        try:
+            server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            server.bind((self.ip,self.port))
+            server.listen(10)
+            server.settimeout(10)
+            self.log.writePrintInfo("Server Created Successfully")
+            return server
+        except Exception:
+            self.log.writeFatal()
+            
+    def closeServer(self) -> None:
+        self.setStatus(False)
+        if self.clients:
+            self.clearClients()
+        if self.server:
+            self.log.writePrintInfo("Server Closed")
+            self.server.close()
+        
+    def acceptClient(self) -> None:
+        try:
+            threads = []
+            while self.getStatus():
+                try:
+                    client: tuple = self.server.accept()
+                except TimeoutError:
+                    self.log.writeInfo("Server Timeout")
+                    if not self.getStatus():
+                        break
+                    continue
+                except socket.error:
+                    self.log.writeWarning("Server Interrupted")
+                    break
+                self.addClient(client)
+            for t in threads:
+                t.join()
+        except Exception:
+            self.log.writeFatal()
+        finally:
+            if self.getStatus():
+                self.closeServer()
 
     def receiveMessage(self, client: tuple) -> None:
         try: 
@@ -197,7 +191,7 @@ class Server(Common):
                 message = input("")
                 self.broadcastMessage(message)
                 if message == "close":
-                    self.logAndPrintInfo("Server is shutting down")
+                    self.log.writePrintInfo("Server is shutting down")
                     self.closeServer()
         except Exception:
             self.log.writeFatal()
@@ -219,17 +213,17 @@ SPORT = 8082
 
 def main():
     try:
-        safePath, certFileName = "safe", "cert"
+        cHelper = CryptoHelper("safe")
         try:
-            cert = CertificateManager.ReadCertificateFromSafe(safePath, certFileName)
-            key = KeysAndHashes.ReadFromSafe(safePath, "PrivCert")
-            certKey = KeysAndHashes.LoadPrivateKey(key)
+            cert = CertificateManager.ReadCertificateFromSafe("cert")
+            key = cHelper.ReadFromSafe("PrivCert")
+            certKey = cHelper.LoadPrivateKey(key)
         except FileNotFoundError:
             certKey = CertificateManager()
-            KeysAndHashes.WritePrivateKeyToSafe(certKey, safePath, "PrivCert")
+            cHelper.WriteToSafe(certKey, "PrivCert")
             cert = certKey.GenerateCertificate(certKey, "IL", "Haifa", "Ramla", "Orel6505", "Orel Yosupov")
-            certKey.WriteCertToSafe(cert, safePath, certFileName)
-            cert = certKey.ReadCertificateFromSafe(safePath, certFileName)
+            certKey.WriteCertToSafe(cert, "cert")
+            cert = certKey.ReadCertificateFromSafe("cert")
         server = Server(IP,PORT)
         server.AddSecrets(cert, certKey)
         t = threading.Thread(target=server.acceptClient, args=())
@@ -239,7 +233,7 @@ def main():
     except Exception:
         server.log.writeFatal()
     finally:
-        server.logAndPrintInfo("Server Finished")
+        server.log.writePrintInfo("Server Finished")
         server.closeLog()
         if server.getStatus():
             server.closeServer()
